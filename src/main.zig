@@ -81,7 +81,7 @@ const Paddle = struct {
 
 const Bricks = struct {
     const DIMENSION = c.Vector2{ .x = 40.0, .y = 15.0 };
-    const MARGIN = c.Vector2{ .x = 10.0, .y = 10.0 };
+    const MARGIN = c.Vector2{ .x = 5.0, .y = 5.0 };
     const COUNT_X = 10;
     const COUNT_Y = 25;
 
@@ -245,8 +245,12 @@ fn draw_text_centered2(window_size: c.Vector2, text1: [*c]const u8, text2: [*c]c
 }
 
 const Game = struct {
-    window_size: c.Vector2,
     random: std.rand.Random,
+
+    window_size: c.Vector2,
+
+    background_scale: f32,
+    background_texture: c.Texture,
 
     state: GameState,
 
@@ -254,16 +258,32 @@ const Game = struct {
     bricks: Bricks,
     ball: Ball,
 
-    fn init(window_size: c.Vector2, random: std.rand.Random) Game {
+    fn init(background_path: []const u8, background_scale: f32, random: std.rand.Random) !Game {
         var game: Game = undefined;
-        game.window_size = window_size;
         game.random = random;
-        game.state = .Initial;
-        game.reset();
+
+        const background_image = c.LoadImage(background_path.ptr);
+        if (!c.IsImageValid(background_image)) return error.Image;
+        defer c.UnloadImage(background_image);
+
+        game.window_size.x = @as(f32, @floatFromInt(background_image.width)) * background_scale;
+        game.window_size.y = @as(f32, @floatFromInt(background_image.height)) * background_scale;
+        c.InitWindow(@intFromFloat(game.window_size.x), @intFromFloat(game.window_size.y), background_path.ptr);
+
+        game.background_scale = background_scale;
+        game.background_texture = c.LoadTextureFromImage(background_image);
+        if (!c.IsTextureValid(game.background_texture)) return error.Texture;
+
+        game.reset(.Initial);
         return game;
     }
 
-    fn reset(self: *Game) void {
+    fn deinit(self: *Game) void {
+        c.UnloadTexture(self.background_texture);
+    }
+
+    fn reset(self: *Game, state: GameState) void {
+        self.state = state;
         self.paddle = Paddle.init(self.window_size);
         self.bricks = Bricks.init(self.window_size);
         self.ball = Ball.init(self.window_size, self.random);
@@ -279,8 +299,7 @@ const Game = struct {
 
                 self.paddle.update(dt);
                 if (!self.ball.update(dt)) {
-                    self.state = .GameOver;
-                    self.reset();
+                    self.reset(.GameOver);
                     return;
                 }
 
@@ -294,6 +313,7 @@ const Game = struct {
         c.BeginDrawing();
         {
             c.ClearBackground(c.BLACK);
+            c.DrawTextureEx(self.background_texture, c.Vector2Zero(), 0.0, self.background_scale, c.WHITE);
 
             self.paddle.render();
             self.bricks.render();
@@ -307,25 +327,74 @@ const Game = struct {
         }
         c.EndDrawing();
     }
+
+    fn run(self: *Game) void {
+        while (!c.WindowShouldClose()) {
+            self.update();
+            self.render();
+        }
+    }
 };
 
+fn usage(program_name: []const u8) void {
+    std.debug.print("Usage: {s} [--scale BACKGROUND_SCALE] <BACKGROUND_PATH>\n", .{program_name});
+    std.process.exit(1);
+}
+
 pub fn main() !void {
-    const window_width = 600;
-    const window_height = 800;
-    const window_size = c.Vector2{ .x = @floatFromInt(window_width), .y = @floatFromInt(window_height) };
-    const window_title = "Breakout";
-    c.InitWindow(window_width, window_height, window_title);
+    const allocator = std.heap.c_allocator;
+
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+
+    const program_name = args.next() orelse return usage("ziggames");
+
+    var background_path_arg: ?[]const u8 = null;
+    var background_scale_arg: ?[]const u8 = null;
+
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--scale")) {
+            if (background_scale_arg != null) {
+                std.debug.print("Error: --scale can not be used more than once\n", .{});
+                usage(program_name);
+            }
+
+            background_scale_arg = args.next();
+            if (background_scale_arg == null) {
+                std.debug.print("Error: expected argument after --scale\n", .{});
+                usage(program_name);
+            }
+        } else {
+            if (background_path_arg != null) {
+                std.debug.print("Error: too many arguments\n", .{});
+                usage(program_name);
+            }
+
+            background_path_arg = arg;
+        }
+    }
+
+    var background_scale_opt: ?f32 = null;
+    if (background_scale_arg) |arg| {
+        background_scale_opt = std.fmt.parseFloat(f32, arg) catch {
+            std.debug.print("Error: expected floating point after --scale\n", .{});
+            return usage(program_name);
+        };
+    }
+
+    const background_path = background_path_arg orelse {
+        std.debug.print("Error: BACKGROUND_PATH must be provided\n", .{});
+        return usage(program_name);
+    };
+    const background_scale = background_scale_opt orelse 1.0;
 
     var prng = std.rand.DefaultPrng.init(blk: {
         var seed: u64 = undefined;
         try std.posix.getrandom(std.mem.asBytes(&seed));
         break :blk seed;
     });
-    const random = prng.random();
 
-    var game = Game.init(window_size, random);
-    while (!c.WindowShouldClose()) {
-        game.update();
-        game.render();
-    }
+    var game = try Game.init(background_path, background_scale, prng.random());
+    defer game.deinit();
+    game.run();
 }
