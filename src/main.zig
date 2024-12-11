@@ -192,6 +192,7 @@ const Ball = struct {
 
         if (@abs(offset.x) > @abs(offset.y)) {
             self.velocity.x = -self.velocity.x;
+            self.velocity.y *= 1.01; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
             if (offset.x > 0.0) {
                 self.position.x = bounding_box.left() - RADIUS;
             } else {
@@ -199,6 +200,7 @@ const Ball = struct {
             }
         } else {
             self.velocity.y = -self.velocity.y;
+            self.velocity.x *= 1.01; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
             if (offset.y > 0.0) {
                 self.position.y = bounding_box.top() - RADIUS;
             } else {
