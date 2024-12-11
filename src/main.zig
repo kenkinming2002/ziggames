@@ -49,10 +49,13 @@ const Paddle = struct {
     position: c.Vector2,
 
     fn init(window_size: c.Vector2) Paddle {
-        return .{
-            .window_size = window_size,
-            .position = c.Vector2Multiply(window_size, c.Vector2{ .x = 0.5, .y = 0.95 }),
-        };
+        var paddle = Paddle{ .window_size = window_size, .position = undefined };
+        paddle.reset();
+        return paddle;
+    }
+
+    fn reset(self: *Paddle) void {
+        self.position = c.Vector2Multiply(self.window_size, c.Vector2{ .x = 0.5, .y = 0.95 });
     }
 
     fn bounding_box(self: Paddle) Box {
@@ -80,33 +83,48 @@ const Paddle = struct {
 };
 
 const Bricks = struct {
+    const FILL_RATIO = 0.7;
+
     const DIMENSION = c.Vector2{ .x = 40.0, .y = 15.0 };
     const MARGIN = c.Vector2{ .x = 5.0, .y = 5.0 };
-    const COUNT_X = 10;
-    const COUNT_Y = 25;
 
     const BORDER_COLOR = c.RED;
     const COLOR = c.ORANGE;
 
+    allocator: std.mem.Allocator,
     window_size: c.Vector2,
-    states: [COUNT_Y][COUNT_X]bool,
 
-    fn init(window_size: c.Vector2) Bricks {
-        var states: [COUNT_Y][COUNT_X]bool = undefined;
-        for (0..COUNT_Y) |y| {
-            for (0..COUNT_X) |x| {
-                states[y][x] = true;
-            }
-        }
+    count_x: usize,
+    count_y: usize,
+    states: []bool,
 
-        return .{
+    fn init(allocator: std.mem.Allocator, window_size: c.Vector2) !Bricks {
+        const count_x: usize = @intFromFloat(@trunc((window_size.x - MARGIN.x) / (DIMENSION.x + MARGIN.x)));
+        const count_y: usize = @intFromFloat(@trunc((window_size.y * FILL_RATIO - MARGIN.y) / (DIMENSION.y + MARGIN.y)));
+        const states = try allocator.alloc(bool, count_x * count_y);
+
+        var bricks = Bricks{
+            .allocator = allocator,
             .window_size = window_size,
+            .count_x = count_x,
+            .count_y = count_y,
             .states = states,
         };
+        bricks.reset();
+        return bricks;
+    }
+
+    fn deinit(self: *Bricks) void {
+        self.allocator.free(self.states);
+    }
+
+    fn reset(self: *Bricks) void {
+        @memset(self.states, true);
     }
 
     fn bounding_box(self: Bricks, x: usize, y: usize) Box {
-        const total_width = DIMENSION.x * COUNT_X + MARGIN.x * (COUNT_X + 1);
+        const count_x_f: f32 = @floatFromInt(self.count_x);
+        const total_width = DIMENSION.x * count_x_f + MARGIN.x * (count_x_f + 1);
         const anchor = c.Vector2{ .x = (self.window_size.x - total_width) * 0.5 + MARGIN.x, .y = MARGIN.y };
         const offset = c.Vector2Multiply(c.Vector2Add(MARGIN, DIMENSION), c.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
         return .{
@@ -116,9 +134,9 @@ const Bricks = struct {
     }
 
     fn render(self: Bricks) void {
-        for (0..COUNT_Y) |y| {
-            for (0..COUNT_X) |x| {
-                if (self.states[y][x]) {
+        for (0..self.count_y) |y| {
+            for (0..self.count_x) |x| {
+                if (self.states[y * self.count_x + x]) {
                     self.bounding_box(x, y).draw_with_border(COLOR, BORDER_COLOR);
                 }
             }
@@ -126,11 +144,11 @@ const Bricks = struct {
     }
 
     fn update_collision(self: *Bricks, ball: *Ball) void {
-        for (0..COUNT_Y) |y| {
-            for (0..COUNT_X) |x| {
-                if (self.states[y][x]) {
+        for (0..self.count_y) |y| {
+            for (0..self.count_x) |x| {
+                if (self.states[y * self.count_x + x]) {
                     if (ball.collide(self.bounding_box(x, y))) {
-                        self.states[y][x] = false;
+                        self.states[y * self.count_x + x] = false;
                     }
                 }
             }
@@ -145,17 +163,23 @@ const Ball = struct {
     const BORDER_COLOR = c.GREEN;
     const COLOR = c.DARKGREEN;
 
+    random: std.rand.Random,
+
     window_size: c.Vector2,
+
     position: c.Vector2,
     velocity: c.Vector2,
 
     fn init(window_size: c.Vector2, random: std.rand.Random) Ball {
-        const angle = -std.math.pi * random.float(f32);
-        return .{
-            .window_size = window_size,
-            .position = c.Vector2Multiply(window_size, c.Vector2{ .x = 0.5, .y = 0.9 }),
-            .velocity = c.Vector2Scale(c.Vector2{ .x = @cos(angle), .y = @sin(angle) }, SPEED),
-        };
+        var ball = Ball{ .random = random, .window_size = window_size, .position = undefined, .velocity = undefined };
+        ball.reset();
+        return ball;
+    }
+
+    fn reset(self: *Ball) void {
+        const angle = -std.math.pi * self.random.float(f32);
+        self.position = c.Vector2Multiply(self.window_size, c.Vector2{ .x = 0.5, .y = 0.9 });
+        self.velocity = c.Vector2Scale(c.Vector2{ .x = @cos(angle), .y = @sin(angle) }, SPEED);
     }
 
     fn render(self: Ball) void {
@@ -247,6 +271,7 @@ fn draw_text_centered2(window_size: c.Vector2, text1: [*c]const u8, text2: [*c]c
 }
 
 const Game = struct {
+    allocator: std.mem.Allocator,
     random: std.rand.Random,
 
     window_size: c.Vector2,
@@ -254,48 +279,58 @@ const Game = struct {
     background_scale: f32,
     background_texture: c.Texture,
 
-    cheatmode: bool,
-
     state: GameState,
 
     paddle: Paddle,
     bricks: Bricks,
     ball: Ball,
 
-    fn init(background_path: []const u8, background_scale: f32, random: std.rand.Random) !Game {
-        var game: Game = undefined;
-        game.random = random;
+    cheatmode: bool,
 
+    fn init(allocator: std.mem.Allocator, random: std.rand.Random, background_path: []const u8, background_scale: f32) !Game {
         const background_image = c.LoadImage(background_path.ptr);
         if (!c.IsImageValid(background_image)) return error.Image;
         defer c.UnloadImage(background_image);
 
-        game.window_size.x = @as(f32, @floatFromInt(background_image.width)) * background_scale;
-        game.window_size.y = @as(f32, @floatFromInt(background_image.height)) * background_scale;
-        c.InitWindow(@intFromFloat(game.window_size.x), @intFromFloat(game.window_size.y), background_path.ptr);
+        const window_size = c.Vector2Scale(c.Vector2{ .x = @floatFromInt(background_image.width), .y = @floatFromInt(background_image.height) }, background_scale);
+        const window_title = background_path.ptr;
+        c.InitWindow(@intFromFloat(window_size.x), @intFromFloat(window_size.y), window_title);
 
-        game.background_scale = background_scale;
-        game.background_texture = c.LoadTextureFromImage(background_image);
-        if (!c.IsTextureValid(game.background_texture)) return error.Texture;
+        const background_texture = c.LoadTextureFromImage(background_image);
+        if (!c.IsTextureValid(background_texture)) return error.Texture;
+        errdefer c.UnloadTexture(background_texture);
 
-        game.cheatmode = false;
+        const paddle = Paddle.init(window_size);
+        const bricks = try Bricks.init(allocator, window_size);
+        const ball = Ball.init(window_size, random);
 
-        game.reset(.Initial);
-        return game;
+        return Game{
+            .allocator = allocator,
+            .random = random,
+            .window_size = window_size,
+            .background_scale = background_scale,
+            .background_texture = background_texture,
+            .state = .Initial,
+            .paddle = paddle,
+            .bricks = bricks,
+            .ball = ball,
+            .cheatmode = false,
+        };
     }
 
     fn deinit(self: *Game) void {
+        self.bricks.deinit();
         c.UnloadTexture(self.background_texture);
     }
 
-    fn reset(self: *Game, state: GameState) void {
-        self.state = state;
-        self.paddle = Paddle.init(self.window_size);
-        self.bricks = Bricks.init(self.window_size);
-        self.ball = Ball.init(self.window_size, self.random);
+    fn reset(self: *Game) !void {
+        self.state = .GameOver;
+        self.paddle.reset();
+        self.bricks.reset();
+        self.ball.reset();
     }
 
-    fn update(self: *Game) void {
+    fn update(self: *Game) !void {
         switch (self.state) {
             .Initial, .GameOver => if (c.IsKeyPressed(c.KEY_SPACE)) {
                 self.state = .Playing;
@@ -305,7 +340,7 @@ const Game = struct {
 
                 self.paddle.update(dt);
                 if (!self.ball.update(dt)) {
-                    self.reset(.GameOver);
+                    try self.reset();
                     return;
                 }
 
@@ -337,9 +372,9 @@ const Game = struct {
         c.EndDrawing();
     }
 
-    fn run(self: *Game) void {
+    fn run(self: *Game) !void {
         while (!c.WindowShouldClose()) {
-            self.update();
+            try self.update();
             self.render();
         }
     }
@@ -352,6 +387,13 @@ fn usage(program_name: []const u8) void {
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
+
+    var prng = std.rand.DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        try std.posix.getrandom(std.mem.asBytes(&seed));
+        break :blk seed;
+    });
+    const random = prng.random();
 
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
@@ -397,13 +439,7 @@ pub fn main() !void {
     };
     const background_scale = background_scale_opt orelse 1.0;
 
-    var prng = std.rand.DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        try std.posix.getrandom(std.mem.asBytes(&seed));
-        break :blk seed;
-    });
-
-    var game = try Game.init(background_path, background_scale, prng.random());
+    var game = try Game.init(allocator, random, background_path, background_scale);
     defer game.deinit();
-    game.run();
+    try game.run();
 }
