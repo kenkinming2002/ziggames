@@ -150,7 +150,7 @@ const Ball = struct {
     velocity: c.Vector2,
 
     fn init(window_size: c.Vector2, random: std.rand.Random) Ball {
-        const angle = std.math.pi * (random.float(f32) - 0.5);
+        const angle = -std.math.pi * random.float(f32);
         return .{
             .window_size = window_size,
             .position = c.Vector2Multiply(window_size, c.Vector2{ .x = 0.5, .y = 0.9 }),
