@@ -252,6 +252,8 @@ const Game = struct {
     background_scale: f32,
     background_texture: c.Texture,
 
+    cheatmode: bool,
+
     state: GameState,
 
     paddle: Paddle,
@@ -273,6 +275,8 @@ const Game = struct {
         game.background_scale = background_scale;
         game.background_texture = c.LoadTextureFromImage(background_image);
         if (!c.IsTextureValid(game.background_texture)) return error.Texture;
+
+        game.cheatmode = false;
 
         game.reset(.Initial);
         return game;
@@ -302,6 +306,9 @@ const Game = struct {
                     self.reset(.GameOver);
                     return;
                 }
+
+                if (c.IsKeyPressed(c.KEY_C)) self.cheatmode = !self.cheatmode;
+                if (self.cheatmode) self.paddle.position.x = self.ball.position.x;
 
                 self.paddle.update_collision(&self.ball);
                 self.bricks.update_collision(&self.ball);
