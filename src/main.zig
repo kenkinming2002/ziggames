@@ -31,11 +31,56 @@ const Box = struct {
         };
     }
 
+    fn grid(self: Box, width: usize, height: usize, x: usize, y: usize) Box {
+        const step_x = self.dimension.x / @as(f32, @floatFromInt(width));
+        const step_y = self.dimension.y / @as(f32, @floatFromInt(height));
+        return .{
+            .position = .{
+                .x = self.position.x + step_x * @as(f32, @floatFromInt(x)),
+                .y = self.position.y + step_y * @as(f32, @floatFromInt(y)),
+            },
+            .dimension = .{
+                .x = step_x,
+                .y = step_y,
+            },
+        };
+    }
+
+    fn to_rectangle(self: Box) c.Rectangle {
+        return c.Rectangle{
+            .x = self.position.x,
+            .y = self.position.y,
+            .width = self.dimension.x,
+            .height = self.dimension.y,
+        };
+    }
+
     fn draw_with_border(self: Box, color: c.Color, border_color: c.Color) void {
         c.DrawRectangleV(c.Vector2Subtract(self.position, BORDER_DIMENSION), c.Vector2Add(self.dimension, c.Vector2Scale(BORDER_DIMENSION, 2.0)), border_color);
         c.DrawRectangleV(self.position, self.dimension, color);
     }
 };
+
+fn get_texture_dimension(texture: c.Texture) c.Vector2 {
+    return .{
+        .x = @floatFromInt(texture.width),
+        .y = @floatFromInt(texture.height),
+    };
+}
+
+fn get_texture_box(texture: c.Texture) Box {
+    return .{
+        .position = c.Vector2Zero(),
+        .dimension = get_texture_dimension(texture),
+    };
+}
+
+fn get_image_dimension(image: c.Image) c.Vector2 {
+    return .{
+        .x = @floatFromInt(image.width),
+        .y = @floatFromInt(image.height),
+    };
+}
 
 const Paddle = struct {
     const DIMENSION = c.Vector2{ .x = 100.0, .y = 15.0 };
@@ -92,22 +137,48 @@ const Bricks = struct {
     const COLOR = c.ORANGE;
 
     allocator: std.mem.Allocator,
-    window_size: c.Vector2,
+
+    area: Box,
+
+    background_texture: c.Texture,
+    bricks_texture: c.Texture,
 
     count_x: usize,
     count_y: usize,
+    dimension: c.Vector2,
+
     states: []bool,
 
-    fn init(allocator: std.mem.Allocator, window_size: c.Vector2) !Bricks {
-        const count_x: usize = @intFromFloat(@trunc((window_size.x - MARGIN.x) / (DIMENSION.x + MARGIN.x)));
-        const count_y: usize = @intFromFloat(@trunc((window_size.y * FILL_RATIO - MARGIN.y) / (DIMENSION.y + MARGIN.y)));
+    fn init(allocator: std.mem.Allocator, area: Box, target_dimension: c.Vector2, image: *c.Image) !Bricks {
+        const background_texture = c.LoadTextureFromImage(image.*);
+        if (!c.IsTextureValid(background_texture)) return error.Texture;
+        errdefer c.UnloadTexture(background_texture);
+
+        c.ImageBlurGaussian(image, 100);
+
+        const brick_texture = c.LoadTextureFromImage(image.*);
+        if (!c.IsTextureValid(brick_texture)) return error.Texture;
+        errdefer c.UnloadTexture(brick_texture);
+
+        const count_x_f = @floor(area.dimension.x / target_dimension.x);
+        const count_y_f = @floor(area.dimension.y / target_dimension.y);
+
+        const count_x: usize = @intFromFloat(count_x_f);
+        const count_y: usize = @intFromFloat(count_y_f);
+
+        const dimension = c.Vector2{ .x = area.dimension.x / count_x_f, .y = area.dimension.y / count_y_f };
+
         const states = try allocator.alloc(bool, count_x * count_y);
+        errdefer allocator.free(states);
 
         var bricks = Bricks{
             .allocator = allocator,
-            .window_size = window_size,
+            .area = area,
+            .background_texture = background_texture,
+            .bricks_texture = brick_texture,
             .count_x = count_x,
             .count_y = count_y,
+            .dimension = dimension,
             .states = states,
         };
         bricks.reset();
@@ -116,38 +187,43 @@ const Bricks = struct {
 
     fn deinit(self: *Bricks) void {
         self.allocator.free(self.states);
+        c.UnloadTexture(self.bricks_texture);
+        c.UnloadTexture(self.background_texture);
     }
 
     fn reset(self: *Bricks) void {
         @memset(self.states, true);
     }
 
-    fn bounding_box(self: Bricks, x: usize, y: usize) Box {
-        const count_x_f: f32 = @floatFromInt(self.count_x);
-        const total_width = DIMENSION.x * count_x_f + MARGIN.x * (count_x_f + 1);
-        const anchor = c.Vector2{ .x = (self.window_size.x - total_width) * 0.5 + MARGIN.x, .y = MARGIN.y };
-        const offset = c.Vector2Multiply(c.Vector2Add(MARGIN, DIMENSION), c.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
-        return .{
-            .position = c.Vector2Add(anchor, offset),
-            .dimension = DIMENSION,
-        };
+    fn render_background(self: Bricks) void {
+        const src = get_texture_box(self.background_texture).to_rectangle();
+        const dst = self.area.to_rectangle();
+        c.DrawTexturePro(self.background_texture, src, dst, c.Vector2Zero(), 0.0, c.WHITE);
     }
 
-    fn render(self: Bricks) void {
+    fn render_bricks(self: Bricks) void {
         for (0..self.count_y) |y| {
             for (0..self.count_x) |x| {
                 if (self.states[y * self.count_x + x]) {
-                    self.bounding_box(x, y).draw_with_border(COLOR, BORDER_COLOR);
+                    const src = get_texture_box(self.bricks_texture).grid(self.count_x, self.count_y, x, y).to_rectangle();
+                    const dst = self.area.grid(self.count_x, self.count_y, x, y).to_rectangle();
+                    c.DrawTexturePro(self.bricks_texture, src, dst, c.Vector2Zero(), 0.0, c.WHITE);
                 }
             }
         }
+    }
+
+    fn render(self: Bricks) void {
+        self.render_background();
+        self.render_bricks();
     }
 
     fn update_collision(self: *Bricks, ball: *Ball) void {
         for (0..self.count_y) |y| {
             for (0..self.count_x) |x| {
                 if (self.states[y * self.count_x + x]) {
-                    if (ball.collide(self.bounding_box(x, y))) {
+                    const bounding_box = self.area.grid(self.count_x, self.count_y, x, y);
+                    if (ball.collide(bounding_box)) {
                         self.states[y * self.count_x + x] = false;
                     }
                 }
@@ -276,9 +352,6 @@ const Game = struct {
 
     window_size: c.Vector2,
 
-    background_scale: f32,
-    background_texture: c.Texture,
-
     state: GameState,
 
     paddle: Paddle,
@@ -287,29 +360,28 @@ const Game = struct {
 
     cheatmode: bool,
 
-    fn init(allocator: std.mem.Allocator, random: std.rand.Random, background_path: []const u8, background_scale: f32) !Game {
-        const background_image = c.LoadImage(background_path.ptr);
-        if (!c.IsImageValid(background_image)) return error.Image;
-        defer c.UnloadImage(background_image);
+    fn init(allocator: std.mem.Allocator, random: std.rand.Random, image_path: []const u8, image_scale: f32) !Game {
+        var image = c.LoadImage(image_path.ptr);
+        if (!c.IsImageValid(image)) return error.Image;
+        defer c.UnloadImage(image);
 
-        const window_size = c.Vector2Scale(c.Vector2{ .x = @floatFromInt(background_image.width), .y = @floatFromInt(background_image.height) }, background_scale);
-        const window_title = background_path.ptr;
+        const image_dimension = get_image_dimension(image);
+
+        const bricks_dimension = c.Vector2Scale(image_dimension, image_scale);
+        const bricks_area = Box{ .position = c.Vector2Zero(), .dimension = bricks_dimension };
+
+        const window_size = c.Vector2{ .x = bricks_dimension.x, .y = bricks_dimension.y + 100.0 };
+        const window_title = image_path.ptr;
         c.InitWindow(@intFromFloat(window_size.x), @intFromFloat(window_size.y), window_title);
 
-        const background_texture = c.LoadTextureFromImage(background_image);
-        if (!c.IsTextureValid(background_texture)) return error.Texture;
-        errdefer c.UnloadTexture(background_texture);
-
         const paddle = Paddle.init(window_size);
-        const bricks = try Bricks.init(allocator, window_size);
+        const bricks = try Bricks.init(allocator, bricks_area, c.Vector2{ .x = 80.0, .y = 30.0 }, &image);
         const ball = Ball.init(window_size, random);
 
         return Game{
             .allocator = allocator,
             .random = random,
             .window_size = window_size,
-            .background_scale = background_scale,
-            .background_texture = background_texture,
             .state = .Initial,
             .paddle = paddle,
             .bricks = bricks,
@@ -320,7 +392,6 @@ const Game = struct {
 
     fn deinit(self: *Game) void {
         self.bricks.deinit();
-        c.UnloadTexture(self.background_texture);
     }
 
     fn reset(self: *Game) !void {
@@ -357,7 +428,6 @@ const Game = struct {
         c.BeginDrawing();
         {
             c.ClearBackground(c.BLACK);
-            c.DrawTextureEx(self.background_texture, c.Vector2Zero(), 0.0, self.background_scale, c.WHITE);
 
             self.paddle.render();
             self.bricks.render();
