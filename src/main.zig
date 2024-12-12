@@ -123,7 +123,8 @@ const Paddle = struct {
     }
 
     fn update_collision(self: *Paddle, ball: *Ball) void {
-        _ = ball.collide(self.bounding_box());
+        var health: u8 = std.math.maxInt(u8);
+        ball.collide(self.bounding_box(), &health);
     }
 };
 
@@ -222,9 +223,7 @@ const Bricks = struct {
             for (0..self.count_x) |x| {
                 if (self.states[y * self.count_x + x] > 0) {
                     const bounding_box = self.area.grid(self.count_x, self.count_y, x, y);
-                    if (ball.collide(bounding_box)) {
-                        self.states[y * self.count_x + x] -= 1;
-                    }
+                    ball.collide(bounding_box, &self.states[y * self.count_x + x]);
                 }
             }
         }
@@ -235,6 +234,8 @@ const Ball = struct {
     const RADIUS: f32 = 10.0;
     const SPEED: f32 = 200.0;
 
+    const MAX_ENERGY = 10;
+
     const BORDER_COLOR = c.GREEN;
     const COLOR = c.DARKGREEN;
 
@@ -244,9 +245,16 @@ const Ball = struct {
 
     position: c.Vector2,
     velocity: c.Vector2,
+    energy: u8,
 
     fn init(window_size: c.Vector2, random: std.rand.Random) Ball {
-        var ball = Ball{ .random = random, .window_size = window_size, .position = undefined, .velocity = undefined };
+        var ball = Ball{
+            .random = random,
+            .window_size = window_size,
+            .position = undefined,
+            .velocity = undefined,
+            .energy = undefined,
+        };
         ball.reset();
         return ball;
     }
@@ -255,6 +263,7 @@ const Ball = struct {
         const angle = -std.math.pi * self.random.float(f32);
         self.position = c.Vector2Multiply(self.window_size, c.Vector2{ .x = 0.5, .y = 0.9 });
         self.velocity = c.Vector2Scale(c.Vector2{ .x = @cos(angle), .y = @sin(angle) }, SPEED);
+        self.energy = MAX_ENERGY;
     }
 
     fn render(self: Ball) void {
@@ -268,26 +277,38 @@ const Ball = struct {
         if (self.position.x < RADIUS) {
             self.position.x = RADIUS;
             self.velocity.x = -self.velocity.x;
+            self.energy = MAX_ENERGY;
         }
 
         if (self.position.y < RADIUS) {
             self.position.y = RADIUS;
             self.velocity.y = -self.velocity.y;
+            self.energy = MAX_ENERGY;
         }
 
         if (self.position.x > self.window_size.x - RADIUS) {
             self.position.x = self.window_size.x - RADIUS;
             self.velocity.x = -self.velocity.x;
+            self.energy = MAX_ENERGY;
         }
 
         return self.position.y <= self.window_size.y - RADIUS;
     }
 
-    fn collide(self: *Ball, bounding_box: Box) bool {
+    fn collide(self: *Ball, bounding_box: Box, health: *u8) void {
         const contact = bounding_box.clamp(self.position);
         const offset = c.Vector2Subtract(contact, self.position);
         if (c.Vector2LengthSqr(offset) > RADIUS * RADIUS)
-            return false;
+            return;
+
+        if (self.energy > health.*) {
+            self.energy -= health.*;
+            health.* = 0;
+            return;
+        }
+
+        health.* -= self.energy;
+        self.energy = MAX_ENERGY;
 
         if (@abs(offset.x) > @abs(offset.y)) {
             self.velocity.x = -self.velocity.x;
@@ -306,8 +327,6 @@ const Ball = struct {
                 self.position.y = bounding_box.bottom() + RADIUS;
             }
         }
-
-        return true;
     }
 };
 
