@@ -129,11 +129,6 @@ const Paddle = struct {
 };
 
 const Bricks = struct {
-    const FILL_RATIO = 0.7;
-
-    const DIMENSION = c.Vector2{ .x = 40.0, .y = 15.0 };
-    const MARGIN = c.Vector2{ .x = 5.0, .y = 5.0 };
-
     const BORDER_COLOR = c.RED;
     const COLOR = c.ORANGE;
 
