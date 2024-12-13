@@ -132,7 +132,7 @@ const Bricks = struct {
     const BORDER_COLOR = c.RED;
     const COLOR = c.ORANGE;
 
-    const MAX_LEVEL = 4;
+    const MAX_LEVEL = 10;
     const DESTROY_RATIO = 0.15;
 
     allocator: std.mem.Allocator,
@@ -162,7 +162,7 @@ const Bricks = struct {
         for (1..MAX_LEVEL) |i| {
             var blurred_image = c.ImageCopy(image);
             defer c.UnloadImage(blurred_image);
-            c.ImageBlurGaussian(&blurred_image, @intCast(i * 20));
+            c.ImageBlurGaussian(&blurred_image, @intCast(i * 10));
 
             const blurred_texture = c.LoadTextureFromImage(blurred_image);
             if (!c.IsTextureValid(blurred_texture)) return error.LoadTextureFromImage;
@@ -246,9 +246,11 @@ const Bricks = struct {
 
 const Ball = struct {
     const RADIUS: f32 = 10.0;
-    const SPEED: f32 = 200.0;
 
-    const MAX_ENERGY = 10;
+    const SPEED: f32 = 200.0;
+    const SPEED_UP: f32 = 1.001;
+
+    const MAX_ENERGY = 25;
 
     const BORDER_COLOR = c.GREEN;
     const COLOR = c.DARKGREEN;
@@ -326,7 +328,7 @@ const Ball = struct {
 
         if (@abs(offset.x) > @abs(offset.y)) {
             self.velocity.x = -self.velocity.x;
-            self.velocity.y *= 1.01; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
+            self.velocity.y *= SPEED_UP; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
             if (offset.x > 0.0) {
                 self.position.x = bounding_box.left() - RADIUS;
             } else {
@@ -334,7 +336,7 @@ const Ball = struct {
             }
         } else {
             self.velocity.y = -self.velocity.y;
-            self.velocity.x *= 1.01; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
+            self.velocity.x *= SPEED_UP; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
             if (offset.y > 0.0) {
                 self.position.y = bounding_box.top() - RADIUS;
             } else {
@@ -407,7 +409,7 @@ const Game = struct {
         c.InitWindow(@intFromFloat(window_size.x), @intFromFloat(window_size.y), window_title);
 
         const paddle = Paddle.init(window_size);
-        const bricks = try Bricks.init(allocator, bricks_area, c.Vector2{ .x = 80.0, .y = 30.0 }, image);
+        const bricks = try Bricks.init(allocator, bricks_area, c.Vector2{ .x = 20.0, .y = 20.0 }, image);
         const ball = Ball.init(window_size, random);
 
         return Game{
