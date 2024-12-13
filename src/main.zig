@@ -124,7 +124,7 @@ const Paddle = struct {
 
     fn update_collision(self: *Paddle, ball: *Ball) void {
         var health: u8 = std.math.maxInt(u8);
-        ball.collide(self.bounding_box(), &health);
+        ball.collide(self.bounding_box(), 0, &health);
     }
 };
 
@@ -138,6 +138,7 @@ const Bricks = struct {
     const COLOR = c.ORANGE;
 
     const MAX_LEVEL = 4;
+    const DESTROY_RATIO = 0.15;
 
     allocator: std.mem.Allocator,
 
@@ -149,7 +150,8 @@ const Bricks = struct {
     count_y: usize,
     dimension: c.Vector2,
 
-    states: []u8,
+    healths: []u8,
+    counts: [MAX_LEVEL]usize,
 
     fn init(allocator: std.mem.Allocator, area: Box, target_dimension: c.Vector2, image: c.Image) !Bricks {
         var textures: [MAX_LEVEL]c.Texture = undefined;
@@ -182,8 +184,8 @@ const Bricks = struct {
 
         const dimension = c.Vector2{ .x = area.dimension.x / count_x_f, .y = area.dimension.y / count_y_f };
 
-        const states = try allocator.alloc(u8, count_x * count_y);
-        errdefer allocator.free(states);
+        const healths = try allocator.alloc(u8, count_x * count_y);
+        errdefer allocator.free(healths);
 
         var bricks = Bricks{
             .allocator = allocator,
@@ -192,7 +194,8 @@ const Bricks = struct {
             .count_x = count_x,
             .count_y = count_y,
             .dimension = dimension,
-            .states = states,
+            .healths = healths,
+            .counts = undefined,
         };
         bricks.reset();
         return bricks;
@@ -200,17 +203,19 @@ const Bricks = struct {
 
     fn deinit(self: *Bricks) void {
         for (self.textures) |texture| c.UnloadTexture(texture);
-        self.allocator.free(self.states);
+        self.allocator.free(self.healths);
     }
 
     fn reset(self: *Bricks) void {
-        @memset(self.states, MAX_LEVEL - 1);
+        @memset(self.healths, MAX_LEVEL - 1);
+        @memset(&self.counts, 0);
+        self.counts[MAX_LEVEL - 1] = self.count_x * self.count_y;
     }
 
     fn render(self: Bricks) void {
         for (0..self.count_y) |y| {
             for (0..self.count_x) |x| {
-                const texture = self.textures[self.states[y * self.count_x + x]];
+                const texture = self.textures[self.healths[y * self.count_x + x]];
                 const src = get_texture_box(texture).grid(self.count_x, self.count_y, x, y).to_rectangle();
                 const dst = self.area.grid(self.count_x, self.count_y, x, y).to_rectangle();
                 c.DrawTexturePro(texture, src, dst, c.Vector2Zero(), 0.0, c.WHITE);
@@ -219,11 +224,25 @@ const Bricks = struct {
     }
 
     fn update_collision(self: *Bricks, ball: *Ball) void {
+        var min_health: u8 = MAX_LEVEL - 1;
+
+        const threshold: usize = @intFromFloat(@floor(@as(f32, @floatFromInt(self.count_x * self.count_y)) * DESTROY_RATIO));
+        var count: usize = 0;
+        while (min_health > 0 and count < threshold) {
+            count += self.counts[min_health];
+            min_health -= 1;
+        }
+
         for (0..self.count_y) |y| {
             for (0..self.count_x) |x| {
-                if (self.states[y * self.count_x + x] > 0) {
+                const state = &self.healths[y * self.count_x + x];
+                if (state.* > 0) {
+                    self.counts[state.*] -= 1;
+
                     const bounding_box = self.area.grid(self.count_x, self.count_y, x, y);
-                    ball.collide(bounding_box, &self.states[y * self.count_x + x]);
+                    ball.collide(bounding_box, min_health, state);
+
+                    self.counts[state.*] += 1;
                 }
             }
         }
@@ -295,15 +314,15 @@ const Ball = struct {
         return self.position.y <= self.window_size.y - RADIUS;
     }
 
-    fn collide(self: *Ball, bounding_box: Box, health: *u8) void {
+    fn collide(self: *Ball, bounding_box: Box, min_health: u8, health: *u8) void {
         const contact = bounding_box.clamp(self.position);
         const offset = c.Vector2Subtract(contact, self.position);
         if (c.Vector2LengthSqr(offset) > RADIUS * RADIUS)
             return;
 
-        if (self.energy > health.*) {
-            self.energy -= health.*;
-            health.* = 0;
+        if (self.energy > health.* - min_health) {
+            self.energy -= health.* - min_health;
+            health.* = min_health;
             return;
         }
 
