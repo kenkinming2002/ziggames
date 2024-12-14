@@ -131,64 +131,61 @@ const Board = struct {
         for (&self.balls, 0..) |*ball, i| {
             ball.position = c.Vector2Add(ball.position, c.Vector2Scale(ball.velocity, dt));
 
-            outer: {
-                const x1: isize = @intFromFloat(@floor((ball.position.x - BALL_RADIUS) / CELL_WIDTH));
-                const y1: isize = @intFromFloat(@floor((ball.position.y - BALL_RADIUS) / CELL_WIDTH));
+            const x1: isize = @intFromFloat(@floor((ball.position.x - BALL_RADIUS) / CELL_WIDTH));
+            const y1: isize = @intFromFloat(@floor((ball.position.y - BALL_RADIUS) / CELL_WIDTH));
 
-                const x2: isize = @intFromFloat(@ceil((ball.position.x + BALL_RADIUS) / CELL_WIDTH));
-                const y2: isize = @intFromFloat(@ceil((ball.position.y + BALL_RADIUS) / CELL_WIDTH));
+            const x2: isize = @intFromFloat(@ceil((ball.position.x + BALL_RADIUS) / CELL_WIDTH));
+            const y2: isize = @intFromFloat(@ceil((ball.position.y + BALL_RADIUS) / CELL_WIDTH));
 
-                var y = y1;
-                while (y < y2) : (y += 1) {
-                    var x = x1;
-                    while (x < x2) : (x += 1) {
-                        const cell = &self.cells[@intCast(@mod(y, BOARD_HEIGHT))][@intCast(@mod(x, BOARD_WIDTH))];
-                        if (cell.index != i) {
-                            const top: f32 = @floatFromInt(CELL_HEIGHT * y);
-                            const bottom: f32 = @floatFromInt(CELL_HEIGHT * (y + 1));
+            var y = y1;
+            while (y < y2) : (y += 1) {
+                var x = x1;
+                while (x < x2) : (x += 1) {
+                    const cell = &self.cells[@intCast(@mod(y, BOARD_HEIGHT))][@intCast(@mod(x, BOARD_WIDTH))];
+                    if (cell.index != i) {
+                        const top: f32 = @floatFromInt(CELL_HEIGHT * y);
+                        const bottom: f32 = @floatFromInt(CELL_HEIGHT * (y + 1));
 
-                            const left: f32 = @floatFromInt(CELL_WIDTH * x);
-                            const right: f32 = @floatFromInt(CELL_WIDTH * (x + 1));
+                        const left: f32 = @floatFromInt(CELL_WIDTH * x);
+                        const right: f32 = @floatFromInt(CELL_WIDTH * (x + 1));
 
-                            const contact = c.Vector2{
-                                .x = @min(@max(ball.position.x, left), right),
-                                .y = @min(@max(ball.position.y, top), bottom),
-                            };
+                        const contact = c.Vector2{
+                            .x = @min(@max(ball.position.x, left), right),
+                            .y = @min(@max(ball.position.y, top), bottom),
+                        };
 
-                            const offset = c.Vector2Subtract(contact, ball.position);
-                            if (c.Vector2LengthSqr(offset) < BALL_RADIUS * BALL_RADIUS) {
-                                if (@abs(offset.x) > @abs(offset.y)) {
-                                    ball.velocity.x = -ball.velocity.x;
-                                    if (offset.x > 0.0) {
-                                        ball.position.x = left - BALL_RADIUS;
-                                    } else {
-                                        ball.position.x = right + BALL_RADIUS;
-                                    }
+                        const offset = c.Vector2Subtract(contact, ball.position);
+                        if (c.Vector2LengthSqr(offset) < BALL_RADIUS * BALL_RADIUS) {
+                            if (@abs(offset.x) > @abs(offset.y)) {
+                                ball.velocity.x = -ball.velocity.x;
+                                if (offset.x > 0.0) {
+                                    ball.position.x = left - BALL_RADIUS;
                                 } else {
-                                    ball.velocity.y = -ball.velocity.y;
-                                    if (offset.y > 0.0) {
-                                        ball.position.y = top - BALL_RADIUS;
-                                    } else {
-                                        ball.position.y = bottom + BALL_RADIUS;
+                                    ball.position.x = right + BALL_RADIUS;
+                                }
+                            } else {
+                                ball.velocity.y = -ball.velocity.y;
+                                if (offset.y > 0.0) {
+                                    ball.position.y = top - BALL_RADIUS;
+                                } else {
+                                    ball.position.y = bottom + BALL_RADIUS;
+                                }
+                            }
+
+                            for (&self.balls, 0..) |*other_ball, other_i| {
+                                if (i != other_i) {
+                                    const other_contact = c.Vector2{
+                                        .x = @min(@max(other_ball.position.x, left), right),
+                                        .y = @min(@max(other_ball.position.y, top), bottom),
+                                    };
+
+                                    const other_offset = c.Vector2Subtract(other_contact, other_ball.position);
+                                    if (c.Vector2LengthSqr(other_offset) < BALL_RADIUS * BALL_RADIUS) {
+                                        break;
                                     }
                                 }
-
-                                for (&self.balls, 0..) |*other_ball, other_i| {
-                                    if (i != other_i) {
-                                        const other_contact = c.Vector2{
-                                            .x = @min(@max(other_ball.position.x, left), right),
-                                            .y = @min(@max(other_ball.position.y, top), bottom),
-                                        };
-
-                                        const other_offset = c.Vector2Subtract(other_contact, other_ball.position);
-                                        if (c.Vector2LengthSqr(other_offset) < BALL_RADIUS * BALL_RADIUS) {
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    cell.index = @intCast(i);
-                                }
-                                break :outer;
+                            } else {
+                                cell.index = @intCast(i);
                             }
                         }
                     }
