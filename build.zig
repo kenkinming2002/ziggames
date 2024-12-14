@@ -4,7 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    for ([_][]const u8{"breakout"}) |name| {
+    for ([_][]const u8{
+        "breakout",
+        "npong",
+    }) |name| {
         const root_source_file = b.path(b.fmt("src/{s}.zig", .{name}));
         const exe = b.addExecutable(.{
             .name = name,
