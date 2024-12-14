@@ -13,7 +13,7 @@ const WINDOW_HEIGHT = BOARD_HEIGHT * CELL_HEIGHT;
 const BALL_COUNT = 10;
 const BALL_RADIUS = 8;
 const BALL_SPEED = 100.0;
-const BALL_REPULSION_COEFFICIENT = 10.0;
+const BALL_REPULSION_COEFFICIENT = 10000.0;
 const BALL_REPULSION_DISTANCE_THRESHOLD = 5.0;
 
 fn Vector2Torus(vector: c.Vector2) c.Vector2 {
@@ -118,10 +118,8 @@ const Board = struct {
 
                 const displacement = c.Vector2Subtract(ball2.position, ball1.position);
                 const distance = @max(Vector2TorusLength(displacement), BALL_REPULSION_DISTANCE_THRESHOLD);
-                const impulse = c.Vector2Scale(displacement, BALL_REPULSION_COEFFICIENT / (distance * distance * distance));
-
-                std.debug.assert(std.math.isFinite(impulse.x));
-                std.debug.assert(std.math.isFinite(impulse.y));
+                const force = c.Vector2Scale(displacement, BALL_REPULSION_COEFFICIENT / (distance * distance * distance));
+                const impulse = c.Vector2Scale(force, dt);
 
                 ball1.velocity = c.Vector2Subtract(ball1.velocity, impulse);
                 ball2.velocity = c.Vector2Add(ball2.velocity, impulse);
