@@ -13,6 +13,8 @@ const WINDOW_HEIGHT = BOARD_HEIGHT * CELL_HEIGHT;
 const BALL_COUNT = 20;
 const BALL_RADIUS = 8;
 const BALL_SPEED = 100.0;
+const BALL_REPULSION_COEFFICIENT = 200.0;
+const BALL_REPULSION_DISTANCE_THRESHOLD = 5.0;
 
 fn rand_range(random: std.rand.Random, comptime T: type, min: T, max: T) T {
     return min + random.float(T) * (max - min);
@@ -77,6 +79,23 @@ const Board = struct {
     }
 
     fn update(self: *Board, dt: f32) void {
+        for (0..BALL_COUNT) |i| {
+            for (i + 1..BALL_COUNT) |j| {
+                const ball1 = &self.balls[i];
+                const ball2 = &self.balls[j];
+
+                const displacement = c.Vector2Subtract(ball2.position, ball1.position);
+                const distance = @max(c.Vector2Length(displacement), BALL_REPULSION_DISTANCE_THRESHOLD);
+                const impulse = c.Vector2Scale(displacement, BALL_REPULSION_COEFFICIENT / (distance * distance * distance));
+
+                std.debug.assert(std.math.isFinite(impulse.x));
+                std.debug.assert(std.math.isFinite(impulse.y));
+
+                ball1.velocity = c.Vector2Subtract(ball1.velocity, impulse);
+                ball2.velocity = c.Vector2Add(ball2.velocity, impulse);
+            }
+        }
+
         for (&self.balls, 0..) |*ball, i| {
             ball.position = c.Vector2Add(ball.position, c.Vector2Scale(ball.velocity, dt));
 
@@ -100,16 +119,32 @@ const Board = struct {
                 ball.velocity.y = -ball.velocity.y;
             }
 
+            // In a perfect world, there is no floating point imprecision, and
+            // we would never ever go out of bounds. Unfortunately, such a
+            // perfect world does not exist.
+            //
+            // The lower bound SHOULD be fine since in the worst case scenario,
+            // we would get ball.position.[x|y] = BALL_RADIUS, but the floating
+            // point hardware should be able to realize that:
+            //   BALL_RADIUS - BALL_RADIUS = 0.
+            //
+            // For the upper bound, in the worse case scenario, we would get
+            // ball.position.[x|y] = [WINDOW_WIDTH|WINDOW_HEIGHT] -
+            // BALL_RADIUS, but asking the stupid floating point hardware to
+            // realize that:
+            //   [WINDOW_WIDTH|WINDOW_HEIGHT] - BALL_RADIUS + BALL_RADIUS = [WINDOW_WIDTH|WINDOW_HEIGHT]
+            // seems a bit too much. Depending on implementation, we may be able to guarantee that:
+            //   [WINDOW_WIDTH|WINDOW_HEIGHT] - BALL_RADIUS + BALL_RADIUS <= [WINDOW_WIDTH|WINDOW_HEIGHT]
+            // which would be sufficient but idk.
+
             const x1: usize = @intFromFloat(@floor((ball.position.x - BALL_RADIUS) / CELL_WIDTH));
-            const x2: usize = @intFromFloat(@floor((ball.position.x + BALL_RADIUS) / CELL_WIDTH));
-
             const y1: usize = @intFromFloat(@floor((ball.position.y - BALL_RADIUS) / CELL_WIDTH));
-            const y2: usize = @intFromFloat(@floor((ball.position.y + BALL_RADIUS) / CELL_WIDTH));
 
-            var y = y1;
-            outer: while (y <= y2) : (y += 1) {
-                var x = x1;
-                while (x <= x2) : (x += 1) {
+            const x2: usize = @max(@as(usize, @intFromFloat(@ceil((ball.position.x + BALL_RADIUS) / CELL_WIDTH))), BOARD_WIDTH);
+            const y2: usize = @max(@as(usize, @intFromFloat(@ceil((ball.position.y + BALL_RADIUS) / CELL_WIDTH))), BOARD_HEIGHT);
+
+            outer: for (y1..y2) |y| {
+                for (x1..x2) |x| {
                     const cell = &self.cells[y][x];
                     if (cell.index != i) {
                         const top: f32 = @floatFromInt(CELL_HEIGHT * y);
