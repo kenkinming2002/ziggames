@@ -248,7 +248,8 @@ const Ball = struct {
     const RADIUS: f32 = 10.0;
 
     const SPEED: f32 = 200.0;
-    const SPEED_UP: f32 = 1.001;
+    const SPEED_UP: f32 = 1.006;
+    const SPEED_DOWN: f32 = 1.0 / SPEED_UP;
 
     const MAX_ENERGY = 25;
 
@@ -328,7 +329,9 @@ const Ball = struct {
 
         if (@abs(offset.x) > @abs(offset.y)) {
             self.velocity.x = -self.velocity.x;
-            self.velocity.y *= SPEED_UP; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
+            self.velocity.x *= SPEED_DOWN;
+            self.velocity.y *= SPEED_UP;
+
             if (offset.x > 0.0) {
                 self.position.x = bounding_box.left() - RADIUS;
             } else {
@@ -336,7 +339,9 @@ const Ball = struct {
             }
         } else {
             self.velocity.y = -self.velocity.y;
-            self.velocity.x *= SPEED_UP; // This server to 1: Increase velocity over time, 2: Introduce variation in ball direction
+            self.velocity.y *= SPEED_DOWN;
+            self.velocity.x *= SPEED_UP;
+
             if (offset.y > 0.0) {
                 self.position.y = bounding_box.top() - RADIUS;
             } else {
