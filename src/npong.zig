@@ -173,7 +173,21 @@ const Board = struct {
                                     }
                                 }
 
-                                cell.index = @intCast(i);
+                                for (&self.balls, 0..) |*other_ball, other_i| {
+                                    if (i != other_i) {
+                                        const other_contact = c.Vector2{
+                                            .x = @min(@max(other_ball.position.x, left), right),
+                                            .y = @min(@max(other_ball.position.y, top), bottom),
+                                        };
+
+                                        const other_offset = c.Vector2Subtract(other_contact, other_ball.position);
+                                        if (c.Vector2LengthSqr(other_offset) < BALL_RADIUS * BALL_RADIUS) {
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    cell.index = @intCast(i);
+                                }
                                 break :outer;
                             }
                         }
