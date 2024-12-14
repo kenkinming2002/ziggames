@@ -1,11 +1,11 @@
 const std = @import("std");
 const c = @import("c.zig");
 
-const BOARD_WIDTH = 30;
-const BOARD_HEIGHT = 30;
+const BOARD_WIDTH = 100;
+const BOARD_HEIGHT = 100;
 
-const CELL_WIDTH = 30;
-const CELL_HEIGHT = 30;
+const CELL_WIDTH = 10;
+const CELL_HEIGHT = 10;
 
 const WINDOW_WIDTH = BOARD_WIDTH * CELL_WIDTH;
 const WINDOW_HEIGHT = BOARD_HEIGHT * CELL_HEIGHT;
