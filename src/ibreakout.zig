@@ -4,6 +4,27 @@ const c = @import("c.zig");
 const BORDER_WIDTH = 1.0;
 const BORDER_DIMENSION = c.Vector2{ .x = BORDER_WIDTH, .y = BORDER_WIDTH };
 
+const BRICK_MAX_LEVEL = 10;
+const BRICK_DESTROY_RATIO = 0.15;
+
+const PADDLE_DIMENSION = c.Vector2{ .x = 100.0, .y = 15.0 };
+const PADDLE_MARGIN = c.Vector2{ .x = 30.0, .y = 30.0 };
+const PADDLE_SPEED = 500.0;
+
+const PADDLE_COLOR = c.YELLOW;
+const PADDLE_BORDER_COLOR = c.ORANGE;
+
+const BALL_RADIUS: f32 = 10.0;
+
+const BALL_SPEED: f32 = 200.0;
+const BALL_SPEED_UP: f32 = 1.006;
+const BALL_SPEED_DOWN: f32 = 1.0 / BALL_SPEED_UP;
+
+const BALL_MAX_ENERGY = 25;
+
+const BALL_BORDER_COLOR = c.GREEN;
+const BALL_COLOR = c.DARKGREEN;
+
 const Box = struct {
     position: c.Vector2,
     dimension: c.Vector2,
@@ -83,13 +104,6 @@ fn get_image_dimension(image: c.Image) c.Vector2 {
 }
 
 const Paddle = struct {
-    const DIMENSION = c.Vector2{ .x = 100.0, .y = 15.0 };
-    const MARGIN = c.Vector2{ .x = 30.0, .y = 30.0 };
-    const SPEED = 500.0;
-
-    const COLOR = c.YELLOW;
-    const BORDER_COLOR = c.ORANGE;
-
     window_size: c.Vector2,
     position: c.Vector2,
 
@@ -105,21 +119,21 @@ const Paddle = struct {
 
     fn bounding_box(self: Paddle) Box {
         return .{
-            .position = c.Vector2Subtract(self.position, c.Vector2Scale(DIMENSION, 0.5)),
-            .dimension = DIMENSION,
+            .position = c.Vector2Subtract(self.position, c.Vector2Scale(PADDLE_DIMENSION, 0.5)),
+            .dimension = PADDLE_DIMENSION,
         };
     }
 
     fn render(self: Paddle) void {
-        self.bounding_box().draw_with_border(COLOR, BORDER_COLOR);
+        self.bounding_box().draw_with_border(PADDLE_COLOR, PADDLE_BORDER_COLOR);
     }
 
     fn update(self: *Paddle, dt: f32) void {
-        if (c.IsKeyDown(c.KEY_A) or c.IsKeyDown(c.KEY_LEFT)) self.position.x -= dt * SPEED;
-        if (c.IsKeyDown(c.KEY_D) or c.IsKeyDown(c.KEY_RIGHT)) self.position.x += dt * SPEED;
+        if (c.IsKeyDown(c.KEY_A) or c.IsKeyDown(c.KEY_LEFT)) self.position.x -= dt * PADDLE_SPEED;
+        if (c.IsKeyDown(c.KEY_D) or c.IsKeyDown(c.KEY_RIGHT)) self.position.x += dt * PADDLE_SPEED;
 
-        self.position.x = @max(self.position.x, DIMENSION.x * 0.5 - MARGIN.x);
-        self.position.x = @min(self.position.x, self.window_size.x - DIMENSION.x * 0.5 + MARGIN.x);
+        self.position.x = @max(self.position.x, PADDLE_DIMENSION.x * 0.5 - PADDLE_MARGIN.x);
+        self.position.x = @min(self.position.x, self.window_size.x - PADDLE_DIMENSION.x * 0.5 + PADDLE_MARGIN.x);
     }
 
     fn update_collision(self: *Paddle, ball: *Ball) void {
@@ -129,27 +143,21 @@ const Paddle = struct {
 };
 
 const Bricks = struct {
-    const BORDER_COLOR = c.RED;
-    const COLOR = c.ORANGE;
-
-    const MAX_LEVEL = 10;
-    const DESTROY_RATIO = 0.15;
-
     allocator: std.mem.Allocator,
 
     area: Box,
 
-    textures: [MAX_LEVEL]c.Texture,
+    textures: [BRICK_MAX_LEVEL]c.Texture,
 
     count_x: usize,
     count_y: usize,
     dimension: c.Vector2,
 
     healths: []u8,
-    counts: [MAX_LEVEL]usize,
+    counts: [BRICK_MAX_LEVEL]usize,
 
     fn init(allocator: std.mem.Allocator, area: Box, target_dimension: c.Vector2, image: c.Image) !Bricks {
-        var textures: [MAX_LEVEL]c.Texture = undefined;
+        var textures: [BRICK_MAX_LEVEL]c.Texture = undefined;
         var texture_count: usize = 0;
         errdefer for (0..texture_count) |i| c.UnloadTexture(textures[i]);
 
@@ -159,7 +167,7 @@ const Bricks = struct {
         textures[texture_count] = texture;
         texture_count += 1;
 
-        for (1..MAX_LEVEL) |i| {
+        for (1..BRICK_MAX_LEVEL) |i| {
             var blurred_image = c.ImageCopy(image);
             defer c.UnloadImage(blurred_image);
             c.ImageBlurGaussian(&blurred_image, @intCast(i * 10));
@@ -202,9 +210,9 @@ const Bricks = struct {
     }
 
     fn reset(self: *Bricks) void {
-        @memset(self.healths, MAX_LEVEL - 1);
+        @memset(self.healths, BRICK_MAX_LEVEL - 1);
         @memset(&self.counts, 0);
-        self.counts[MAX_LEVEL - 1] = self.count_x * self.count_y;
+        self.counts[BRICK_MAX_LEVEL - 1] = self.count_x * self.count_y;
     }
 
     fn render(self: Bricks) void {
@@ -219,9 +227,9 @@ const Bricks = struct {
     }
 
     fn update_collision(self: *Bricks, ball: *Ball) void {
-        var min_health: u8 = MAX_LEVEL - 1;
+        var min_health: u8 = BRICK_MAX_LEVEL - 1;
 
-        const threshold: usize = @intFromFloat(@floor(@as(f32, @floatFromInt(self.count_x * self.count_y)) * DESTROY_RATIO));
+        const threshold: usize = @intFromFloat(@floor(@as(f32, @floatFromInt(self.count_x * self.count_y)) * BRICK_DESTROY_RATIO));
         var count: usize = 0;
         while (min_health > 0 and count < threshold) {
             count += self.counts[min_health];
@@ -245,17 +253,6 @@ const Bricks = struct {
 };
 
 const Ball = struct {
-    const RADIUS: f32 = 10.0;
-
-    const SPEED: f32 = 200.0;
-    const SPEED_UP: f32 = 1.006;
-    const SPEED_DOWN: f32 = 1.0 / SPEED_UP;
-
-    const MAX_ENERGY = 25;
-
-    const BORDER_COLOR = c.GREEN;
-    const COLOR = c.DARKGREEN;
-
     random: std.rand.Random,
 
     window_size: c.Vector2,
@@ -279,43 +276,43 @@ const Ball = struct {
     fn reset(self: *Ball) void {
         const angle = -std.math.pi * self.random.float(f32);
         self.position = c.Vector2Multiply(self.window_size, c.Vector2{ .x = 0.5, .y = 0.9 });
-        self.velocity = c.Vector2Scale(c.Vector2{ .x = @cos(angle), .y = @sin(angle) }, SPEED);
-        self.energy = MAX_ENERGY;
+        self.velocity = c.Vector2Scale(c.Vector2{ .x = @cos(angle), .y = @sin(angle) }, BALL_SPEED);
+        self.energy = BALL_MAX_ENERGY;
     }
 
     fn render(self: Ball) void {
-        c.DrawCircleV(self.position, RADIUS + BORDER_WIDTH, BORDER_COLOR);
-        c.DrawCircleV(self.position, RADIUS, COLOR);
+        c.DrawCircleV(self.position, BALL_RADIUS + BORDER_WIDTH, BALL_BORDER_COLOR);
+        c.DrawCircleV(self.position, BALL_RADIUS, BALL_COLOR);
     }
 
     fn update(self: *Ball, dt: f32) bool {
         self.position = c.Vector2Add(self.position, c.Vector2Scale(self.velocity, dt));
 
-        if (self.position.x < RADIUS) {
-            self.position.x = RADIUS;
+        if (self.position.x < BALL_RADIUS) {
+            self.position.x = BALL_RADIUS;
             self.velocity.x = -self.velocity.x;
-            self.energy = MAX_ENERGY;
+            self.energy = BALL_MAX_ENERGY;
         }
 
-        if (self.position.y < RADIUS) {
-            self.position.y = RADIUS;
+        if (self.position.y < BALL_RADIUS) {
+            self.position.y = BALL_RADIUS;
             self.velocity.y = -self.velocity.y;
-            self.energy = MAX_ENERGY;
+            self.energy = BALL_MAX_ENERGY;
         }
 
-        if (self.position.x > self.window_size.x - RADIUS) {
-            self.position.x = self.window_size.x - RADIUS;
+        if (self.position.x > self.window_size.x - BALL_RADIUS) {
+            self.position.x = self.window_size.x - BALL_RADIUS;
             self.velocity.x = -self.velocity.x;
-            self.energy = MAX_ENERGY;
+            self.energy = BALL_MAX_ENERGY;
         }
 
-        return self.position.y <= self.window_size.y - RADIUS;
+        return self.position.y <= self.window_size.y - BALL_RADIUS;
     }
 
     fn collide(self: *Ball, bounding_box: Box, min_health: u8, health: *u8) void {
         const contact = bounding_box.clamp(self.position);
         const offset = c.Vector2Subtract(contact, self.position);
-        if (c.Vector2LengthSqr(offset) > RADIUS * RADIUS)
+        if (c.Vector2LengthSqr(offset) > BALL_RADIUS * BALL_RADIUS)
             return;
 
         if (self.energy > health.* - min_health) {
@@ -325,27 +322,27 @@ const Ball = struct {
         }
 
         health.* -= self.energy;
-        self.energy = MAX_ENERGY;
+        self.energy = BALL_MAX_ENERGY;
 
         if (@abs(offset.x) > @abs(offset.y)) {
             self.velocity.x = -self.velocity.x;
-            self.velocity.x *= SPEED_DOWN;
-            self.velocity.y *= SPEED_UP;
+            self.velocity.x *= BALL_SPEED_DOWN;
+            self.velocity.y *= BALL_SPEED_UP;
 
             if (offset.x > 0.0) {
-                self.position.x = bounding_box.left() - RADIUS;
+                self.position.x = bounding_box.left() - BALL_RADIUS;
             } else {
-                self.position.x = bounding_box.right() + RADIUS;
+                self.position.x = bounding_box.right() + BALL_RADIUS;
             }
         } else {
             self.velocity.y = -self.velocity.y;
-            self.velocity.y *= SPEED_DOWN;
-            self.velocity.x *= SPEED_UP;
+            self.velocity.y *= BALL_SPEED_DOWN;
+            self.velocity.x *= BALL_SPEED_UP;
 
             if (offset.y > 0.0) {
-                self.position.y = bounding_box.top() - RADIUS;
+                self.position.y = bounding_box.top() - BALL_RADIUS;
             } else {
-                self.position.y = bounding_box.bottom() + RADIUS;
+                self.position.y = bounding_box.bottom() + BALL_RADIUS;
             }
         }
     }
