@@ -236,8 +236,18 @@ const Bricks = struct {
             min_health -= 1;
         }
 
-        for (0..self.count_y) |y| {
-            for (0..self.count_x) |x| {
+        // FIXME: Can we go out of bounds due to floating point inaccuracy.
+
+        const x1: usize = @intFromFloat(@floor((ball.position.x - BALL_RADIUS) / self.dimension.x));
+        const y1: usize = @intFromFloat(@floor((ball.position.y - BALL_RADIUS) / self.dimension.y));
+
+        const x2: usize = @intFromFloat(@ceil((ball.position.x + BALL_RADIUS) / self.dimension.x));
+        const y2: usize = @intFromFloat(@ceil((ball.position.y + BALL_RADIUS) / self.dimension.y));
+
+        var y = y1;
+        while (y < y2) : (y += 1) {
+            var x = x1;
+            while (x < x2) : (x += 1) {
                 const state = &self.healths[y * self.count_x + x];
                 if (state.* > 0) {
                     self.counts[state.*] -= 1;
