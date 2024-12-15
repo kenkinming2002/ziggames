@@ -226,6 +226,8 @@ pub fn main() !void {
     var board = Board.init(random);
 
     c.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "npong");
+    defer c.CloseWindow();
+
     while (!c.WindowShouldClose()) {
         const dt = c.GetFrameTime();
         board.update(dt);

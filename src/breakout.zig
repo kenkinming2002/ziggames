@@ -412,6 +412,7 @@ const Game = struct {
         const window_size = c.Vector2{ .x = bricks_dimension.x, .y = bricks_dimension.y + 100.0 };
         const window_title = image_path.ptr;
         c.InitWindow(@intFromFloat(window_size.x), @intFromFloat(window_size.y), window_title);
+        errdefer c.CloseWindow();
 
         const paddle = Paddle.init(window_size);
         const bricks = try Bricks.init(allocator, bricks_area, c.Vector2{ .x = 20.0, .y = 20.0 }, image);
@@ -431,6 +432,7 @@ const Game = struct {
 
     fn deinit(self: *Game) void {
         self.bricks.deinit();
+        c.CloseWindow();
     }
 
     fn reset(self: *Game) !void {
