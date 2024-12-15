@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     for ([_][]const u8{
-        "breakout",
+        "ibreakout",
         "npong",
     }) |name| {
         const root_source_file = b.path(b.fmt("src/{s}.zig", .{name}));
