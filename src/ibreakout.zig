@@ -6,6 +6,7 @@ const BORDER_DIMENSION = c.Vector2{ .x = BORDER_WIDTH, .y = BORDER_WIDTH };
 
 const BRICK_MAX_LEVEL = 10;
 const BRICK_DESTROY_RATIO = 0.15;
+const BRICK_TARGET_DIMENSION = c.Vector2{ .x = 20.0, .y = 20.0 };
 
 const PADDLE_DIMENSION = c.Vector2{ .x = 100.0, .y = 15.0 };
 const PADDLE_MARGIN = c.Vector2{ .x = 30.0, .y = 30.0 };
@@ -156,7 +157,7 @@ const Bricks = struct {
     healths: []u8,
     counts: [BRICK_MAX_LEVEL]usize,
 
-    fn init(allocator: std.mem.Allocator, area: Box, target_dimension: c.Vector2, image: c.Image) !Bricks {
+    fn init(allocator: std.mem.Allocator, area: Box, image: c.Image) !Bricks {
         var textures: [BRICK_MAX_LEVEL]c.Texture = undefined;
         var texture_count: usize = 0;
         errdefer for (0..texture_count) |i| c.UnloadTexture(textures[i]);
@@ -179,8 +180,8 @@ const Bricks = struct {
             texture_count += 1;
         }
 
-        const count_x_f = @floor(area.dimension.x / target_dimension.x);
-        const count_y_f = @floor(area.dimension.y / target_dimension.y);
+        const count_x_f = @floor(area.dimension.x / BRICK_TARGET_DIMENSION.x);
+        const count_y_f = @floor(area.dimension.y / BRICK_TARGET_DIMENSION.y);
 
         const count_x: usize = @intFromFloat(count_x_f);
         const count_y: usize = @intFromFloat(count_y_f);
@@ -422,7 +423,7 @@ const Game = struct {
         errdefer c.CloseWindow();
 
         const paddle = Paddle.init(window_size);
-        const bricks = try Bricks.init(allocator, bricks_area, c.Vector2{ .x = 20.0, .y = 20.0 }, image);
+        const bricks = try Bricks.init(allocator, bricks_area, image);
         const ball = Ball.init(window_size, random);
 
         return Game{
