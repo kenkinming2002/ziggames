@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
     for ([_][]const u8{
         "ibreakout",
         "npong",
+        "snake",
     }) |name| {
         const root_source_file = b.path(b.fmt("src/{s}.zig", .{name}));
         const exe = b.addExecutable(.{
