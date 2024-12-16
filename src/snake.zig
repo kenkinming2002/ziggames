@@ -146,7 +146,11 @@ const Game = struct {
 
     fn update(self: *Game) void {
         switch (self.state) {
-            .Initial, .GameOver => if (c.IsKeyPressed(c.KEY_SPACE)) {
+            .Initial => if (c.IsKeyPressed(c.KEY_SPACE)) {
+                self.state = .Playing;
+            },
+            .GameOver => if (c.IsKeyPressed(c.KEY_SPACE)) {
+                self.reset();
                 self.state = .Playing;
             },
             .Playing => {
@@ -161,7 +165,6 @@ const Game = struct {
                     self.snake.cooldown -= SNAKE_COOLDOWN;
                     if (!self.step_snake()) {
                         self.state = .GameOver;
-                        self.reset();
                         return;
                     }
                 }

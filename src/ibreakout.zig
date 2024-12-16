@@ -428,8 +428,7 @@ const Game = struct {
         c.CloseWindow();
     }
 
-    fn reset(self: *Game) !void {
-        self.state = .GameOver;
+    fn reset(self: *Game) void {
         self.paddle.reset();
         self.bricks.reset();
         self.ball.reset();
@@ -437,7 +436,11 @@ const Game = struct {
 
     fn update(self: *Game) !void {
         switch (self.state) {
-            .Initial, .GameOver => if (c.IsKeyPressed(c.KEY_SPACE)) {
+            .Initial => if (c.IsKeyPressed(c.KEY_SPACE)) {
+                self.state = .Playing;
+            },
+            .GameOver => if (c.IsKeyPressed(c.KEY_SPACE)) {
+                self.reset();
                 self.state = .Playing;
             },
             .Playing => {
@@ -445,7 +448,7 @@ const Game = struct {
 
                 self.paddle.update(dt);
                 if (!self.ball.update(dt)) {
-                    try self.reset();
+                    self.state = .GameOver;
                     return;
                 }
 
